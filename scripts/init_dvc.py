@@ -1,4 +1,5 @@
 import os
+import shlex
 import sys
 from pathlib import Path
 
@@ -13,10 +14,23 @@ import subprocess
 
 def run(cmd: list[str]):
     """Run shell command with live output and error report."""
-    print(">>", " ".join(cmd))
+    cmd_for_log = cmd.copy()
+    if any(
+        key in cmd_for_log
+        for key in (
+            "access_key_id",
+            "secret_access_key",
+            "password",
+            "token",
+            "session_token",
+        )
+    ):
+        cmd_for_log[-1] = "***"
+
+    print(">>", shlex.join(cmd_for_log))
     result = subprocess.run(cmd, text=True)
     if result.returncode != 0:
-        print(f"Command failed: {' '.join(cmd)}")
+        print(f"Command failed: {shlex.join(cmd_for_log)}")
         sys.exit(result.returncode)
 
 
@@ -49,19 +63,12 @@ def main():
     secret = os.environ["MINIO_ROOT_PASSWORD"]
     storage_name = os.environ["MINIO_STORAGE_NAME"]
 
-    # Check if remote exists
-    print(f"Checking if DVC remote {storage_name!r} exists...")
-    result = subprocess.run(["dvc", "remote", "list"], capture_output=True, text=True)  # noqa: F841
-    remote_exists = storage_name in result.stdout
-
-    # Add remote if not exists
-    if not remote_exists:
-        run(["dvc", "remote", "add", "-d", storage_name, f"s3://{bucket}", "-f"])
-    else:
-        print(f"Remote {storage_name!r} already exists.")
+    # Ensure remote exists and always has required base URL config.
+    # `-f` rewrites remote definition if it already exists (including broken ones).
+    run(["dvc", "remote", "add", "-d", "--local", storage_name, f"s3://{bucket}", "-f"])
 
     # Modify remote params
-    run(["dvc", "remote", "modify", storage_name, "endpointurl", endpoint])
+    run(["dvc", "remote", "modify", "--local", storage_name, "endpointurl", endpoint])
     run(["dvc", "remote", "modify", "--local", storage_name, "access_key_id", access])
     run(
         [
@@ -77,7 +84,7 @@ def main():
 
     # Disable SSL if endpoint starts with http://
     if endpoint.startswith("http://"):
-        run(["dvc", "remote", "modify", storage_name, "use_ssl", "false"])
+        run(["dvc", "remote", "modify", "--local", storage_name, "use_ssl", "false"])
 
     print(f"\n=== DVC remote {storage_name!r} configured successfully ===")
 
