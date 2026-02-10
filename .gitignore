@@ -1,0 +1,3 @@
+.env
+minio*
+test_data*
