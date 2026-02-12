@@ -15,6 +15,7 @@ dvc-local-init:
 	@if [ ! -d ".dvc" ]; then \
 		echo "Initializing DVC..."; \
 		uv run dvc init; \
+		uv run dvc install; \
 	else \
 		echo "DVC already initialized"; \
 	fi
